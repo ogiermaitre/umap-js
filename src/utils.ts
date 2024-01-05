@@ -183,3 +183,9 @@ export function reshape2d<T>(x: T[], a: number, b: number): T[][] {
   }
   return rows;
 }
+
+export function argsort(x: number[]): number[] {
+  const result = range(x.length);
+  result.sort((a, b) => x[a] - x[b]);
+  return result;
+}

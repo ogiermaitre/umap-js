@@ -231,6 +231,7 @@ export class UMAP {
   private targetNNeighbors = this.nNeighbors;
 
   private distanceFn: DistanceFn = euclidean;
+  private precomputedDistances: boolean = false;
 
   // KNN state (can be precomputed and supplied via initializeFit)
   private knnIndices?: number[][];
@@ -257,8 +258,8 @@ export class UMAP {
     const setParam = (key: string) => {
       if (params[key] !== undefined) this[key] = params[key];
     };
-
     setParam('distanceFn');
+    setParam('precomputedDistances');
     setParam('learningRate');
     setParam('localConnectivity');
     setParam('minDist');
@@ -334,9 +335,14 @@ export class UMAP {
     this.X = X;
 
     if (!this.knnIndices && !this.knnDistances) {
-      const knnResults = this.nearestNeighbors(X);
-      this.knnIndices = knnResults.knnIndices;
-      this.knnDistances = knnResults.knnDistances;
+      if (this.precomputedDistances) {
+        this.knnIndices = this.fastKnnIndices(X, this.nNeighbors);
+        this.knnDistances = this.knnIndices.map((indices, i) => indices.map(j => X[i][j]));
+      } else {
+        const knnResults = this.nearestNeighbors(X);
+        this.knnIndices = knnResults.knnIndices;
+        this.knnDistances = knnResults.knnDistances;
+      }
     }
 
     this.graph = this.fuzzySimplicialSet(
@@ -405,6 +411,10 @@ export class UMAP {
    * Transforms data to the existing embedding space.
    */
   transform(toTransform: Vectors) {
+    if( this.precomputedDistances ){
+      throw new Error('Transform not supported with precomputed distances');
+    }
+      
     // Use the previous rawData
     const rawData = this.X;
     if (rawData === undefined || rawData.length === 0) {
@@ -546,6 +556,15 @@ export class UMAP {
    */
   getEmbedding() {
     return this.embedding;
+  }
+
+  private fastKnnIndices(X: Vectors, nNeighbors: number): number[][] {
+    const knnIndices: number[][] = Array.from({ length: X.length }, () => []);
+    for (let i = 0; i < X.length; i++) {
+      knnIndices[i] = utils.argsort(X[i]).slice(0, nNeighbors)
+    }
+
+    return knnIndices
   }
 
   /**
